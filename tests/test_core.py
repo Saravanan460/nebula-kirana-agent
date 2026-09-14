@@ -99,7 +99,7 @@ def run_tests():
     assert success_count == 1 and fail_count == 1, f"Failed concurrency: {results}"
     print("Concurrency guard (one succeeds, one fails due to oversell) - Passed")
 
-    print("\n✅ ALL TESTS PASSED")
+    print("\n=== ALL TESTS PASSED ===")
     
 if __name__ == "__main__":
     run_tests()
