@@ -26,3 +26,4 @@ artifacts/
 .idea/
 .DS_Store
 *.swp
+*.db
