@@ -67,7 +67,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         all_msgs = result.all_messages()
         CHAT_HISTORIES[chat_id] = all_msgs[-20:] if len(all_msgs) > 20 else all_msgs
         
-        reply_text = result.data
+        reply_text = result.output
         
         # Check for file attachments
         file_match = re.search(r"\[FILE_READY:(.+?)\]", reply_text)
