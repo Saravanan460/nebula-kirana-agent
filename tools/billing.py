@@ -228,11 +228,13 @@ def finalize_bill(chat_id: int, payment_mode: str, khata_customer: str = None, t
             subtotal = grand_total - total_cgst - total_sgst
             
             for item in items:
-                cursor.execute("SELECT name, stock_qty FROM products WHERE id = ?", (item['product_id'],))
+                cursor.execute("SELECT name, stock_qty, cost_price, mrp FROM products WHERE id = ?", (item['product_id'],))
                 prod = cursor.fetchone()
                 if prod['stock_qty'] < item['quantity']:
                     # Trigger rollback via exception
                     raise ValueError(f"Oversell: '{prod['name']}' has only {prod['stock_qty']} in stock, bill needs {item['quantity']}.")
+                if prod['mrp'] < prod['cost_price']:
+                    raise ValueError(f"Guardrail: Cannot sell '{prod['name']}' — MRP (₹{prod['mrp']}) is below cost price (₹{prod['cost_price']}).")
             
             # 4. Atomic Stock Decrement
             for item in items:
