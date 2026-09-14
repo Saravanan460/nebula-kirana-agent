@@ -1,0 +1,150 @@
+import os
+from dataclasses import dataclass
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.groq import GroqModel
+from pydantic_ai.models.google import GoogleModel
+
+
+from agent.prompts import SYSTEM_PROMPT
+from tools.inventory import add_product, receive_stock, check_stock, low_stock_report, search_product
+from tools.billing import start_bill, add_item_to_bill, edit_bill_item, view_bill, finalize_bill, cancel_bill
+from tools.khata import create_khata, charge_khata, pay_khata, check_khata
+from tools.preferences import set_preference, get_preferences
+from tools.documents import generate_invoice_pdf, generate_analysis_pptx
+from tools.analytics import daily_summary, close_day
+
+# Determine which model to use based on env vars
+if os.environ.get("GROQ_API_KEY"):
+    model = GroqModel('llama-3.3-70b-versatile')
+elif os.environ.get("GEMINI_API_KEY"):
+    model = GoogleModel('gemini-1.5-flash')
+else:
+    # Fallback to a dummy model if keys are missing (will fail on execution but allows import)
+    model = GoogleModel('gemini-1.5-flash')
+
+@dataclass
+class AgentDeps:
+    chat_id: int
+    message_id: int
+
+agent = Agent(
+    model,
+    system_prompt="You are a helpful Kirana store agent.",
+    deps_type=AgentDeps
+)
+
+@agent.system_prompt
+def add_dynamic_system_prompt(ctx: RunContext[AgentDeps]) -> str:
+    """Injects chat-specific preferences into the system prompt."""
+    chat_id = ctx.deps.chat_id
+    prefs = get_preferences(chat_id)
+    prefs_str = "\n".join([f"- {k}: {v}" for k, v in prefs.items()]) if prefs else "No preferences set yet."
+    return SYSTEM_PROMPT.format(preferences_str=prefs_str)
+
+# Register Inventory Tools
+@agent.tool
+def tool_add_product(ctx: RunContext[AgentDeps], name: str, sku: str, hsn_code: str, unit: str, is_loose: bool, cost_price: float, mrp: float, gst_rate: float, reorder_level: float = 10.0) -> str:
+    """Add a new product (SKU) to the inventory."""
+    return add_product(name, sku, hsn_code, unit, is_loose, cost_price, mrp, gst_rate, reorder_level)
+
+@agent.tool
+def tool_receive_stock(ctx: RunContext[AgentDeps], sku: str, quantity: float, new_cost_price: float = None, new_mrp: float = None) -> str:
+    """Receive new stock for an existing product."""
+    return receive_stock(sku, quantity, new_cost_price, new_mrp)
+
+@agent.tool
+def tool_check_stock(ctx: RunContext[AgentDeps], sku: str) -> str:
+    """Check stock for a specific SKU."""
+    return check_stock(sku)
+
+@agent.tool
+def tool_low_stock_report(ctx: RunContext[AgentDeps]) -> str:
+    """Get a list of all products that are at or below their reorder level."""
+    return low_stock_report()
+
+@agent.tool
+def tool_search_product(ctx: RunContext[AgentDeps], query: str) -> str:
+    """Fuzzy search for products by name to find their SKUs and details."""
+    return search_product(query)
+
+# Register Billing Tools
+@agent.tool
+def tool_start_bill(ctx: RunContext[AgentDeps]) -> str:
+    """Start a new draft bill for the current chat."""
+    return start_bill(ctx.deps.chat_id)
+
+@agent.tool
+def tool_add_item_to_bill(ctx: RunContext[AgentDeps], sku: str, quantity: float) -> str:
+    """Add a product to the current draft bill."""
+    return add_item_to_bill(ctx.deps.chat_id, sku, quantity)
+
+@agent.tool
+def tool_edit_bill_item(ctx: RunContext[AgentDeps], sku: str, new_quantity: float) -> str:
+    """Edit the quantity of an item in the draft bill. Pass 0 to remove."""
+    return edit_bill_item(ctx.deps.chat_id, sku, new_quantity)
+
+@agent.tool
+def tool_view_bill(ctx: RunContext[AgentDeps]) -> str:
+    """View the current draft bill and its totals."""
+    return view_bill(ctx.deps.chat_id)
+
+@agent.tool
+def tool_cancel_bill(ctx: RunContext[AgentDeps]) -> str:
+    """Cancel the current draft bill."""
+    return cancel_bill(ctx.deps.chat_id)
+
+@agent.tool
+def tool_finalize_bill(ctx: RunContext[AgentDeps], payment_mode: str, khata_customer: str = None) -> str:
+    """Finalize the draft bill. payment_mode must be 'cash', 'upi', 'card', or 'khata'."""
+    # Use message_id as idempotency key
+    txn_id = f"msg_{ctx.deps.message_id}"
+    return finalize_bill(ctx.deps.chat_id, payment_mode, khata_customer, txn_id)
+
+# Register Khata Tools
+@agent.tool
+def tool_create_khata(ctx: RunContext[AgentDeps], customer_name: str) -> str:
+    """Create a new khata (credit ledger) for a customer."""
+    return create_khata(ctx.deps.chat_id, customer_name)
+
+@agent.tool
+def tool_charge_khata(ctx: RunContext[AgentDeps], customer_name: str, amount: float, note: str = "") -> str:
+    """Add a manual charge to a customer's khata."""
+    return charge_khata(ctx.deps.chat_id, customer_name, amount, note)
+
+@agent.tool
+def tool_pay_khata(ctx: RunContext[AgentDeps], customer_name: str, amount: float, note: str = "") -> str:
+    """Record a payment received from a khata customer."""
+    return pay_khata(ctx.deps.chat_id, customer_name, amount, note)
+
+@agent.tool
+def tool_check_khata(ctx: RunContext[AgentDeps], customer_name: str = None) -> str:
+    """Check balance for a specific customer or list all khatas."""
+    return check_khata(ctx.deps.chat_id, customer_name)
+
+# Register Preferences Tools
+@agent.tool
+def tool_set_preference(ctx: RunContext[AgentDeps], key: str, value: str) -> str:
+    """Set a preference for the owner (e.g. default_payment=upi, default_atta=aashirvaad 5kg)."""
+    return set_preference(ctx.deps.chat_id, key, value)
+
+# Register Document Tools
+@agent.tool
+def tool_generate_invoice_pdf(ctx: RunContext[AgentDeps], bill_id: int) -> str:
+    """Generate a GST-compliant PDF invoice for a finalized bill."""
+    return generate_invoice_pdf(ctx.deps.chat_id, bill_id)
+
+@agent.tool
+def tool_generate_analysis_pptx(ctx: RunContext[AgentDeps]) -> str:
+    """Generate a weekly sales analysis PPTX deck."""
+    return generate_analysis_pptx(ctx.deps.chat_id)
+
+# Register Analytics Tools
+@agent.tool
+def tool_daily_summary(ctx: RunContext[AgentDeps], target_date: str = None) -> str:
+    """Get the summary of today's sales (or a specific date YYYY-MM-DD)."""
+    return daily_summary(ctx.deps.chat_id, target_date)
+
+@agent.tool
+def tool_close_day(ctx: RunContext[AgentDeps]) -> str:
+    """Snapshot today's sales into the daily_close table."""
+    return close_day(ctx.deps.chat_id)
