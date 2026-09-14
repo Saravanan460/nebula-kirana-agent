@@ -1,0 +1,7 @@
+pydantic-ai
+python-telegram-bot
+reportlab
+python-pptx
+python-dotenv
+groq
+google-genai

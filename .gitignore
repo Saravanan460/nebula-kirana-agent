@@ -1,0 +1,28 @@
+# Environments
+venv/
+env/
+.env
+.venv/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database
+kirana.db
+test_kirana.db
+*.sqlite3
+
+# Artifacts & Outputs
+artifacts/
+*.pdf
+*.pptx
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
