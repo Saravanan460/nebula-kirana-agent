@@ -1,75 +1,95 @@
-# Nebula Kirana Operations Agent
+# 🛒 Nebula Kirana Operations Agent
 
-This project implements a conversational AI agent to run an Indian kirana (grocery) store end-to-end via Telegram, as per the Nebula KnowLab Engineering Hiring Task.
+<div align="center">
+  <i>An autonomous, conversational Point-of-Sale (POS) and store management agent built for Indian Kirana stores.</i><br>
+  <b>Developed for the Nebula KnowLab Engineering Hiring Task</b>
+</div>
 
-## 🛠️ Architecture & Harness Choice
+---
 
-**Harness Picked:** `pydantic-ai`
-I chose `pydantic-ai` because it offers a clean, modern, and Python-native way to build agents without the overhead of heavy node-based state machines (like LangGraph). It satisfies the requirement for a modern agent SDK while allowing true LLM orchestration. 
-- **Agent-First**: The agent observes the user's message, reasons over available tools, executes them, and returns a natural language response.
-- **Dynamic Context**: The `RunContext` is used to inject the `chat_id`, Telegram `message_id` (for idempotency), and the owner's persistent preferences directly into the system prompt at runtime.
+## 🌟 Overview
 
-**Models Used:**
-- Primary: **Groq (`llama-3.3-70b-versatile`)** - Extremely fast tool-calling performance.
-- Fallback: **Google Gemini (`gemini-1.5-flash`)** - Reliable free-tier model.
+The **Nebula Kirana Agent** completely replaces complex POS software. The store owner runs their entire shop simply by chatting with this agent on Telegram. It handles:
+- **Inventory Management** (tracking stock, low-stock alerts)
+- **GST-Compliant Billing** (multi-item drafts, edits, finalization)
+- **Khata Ledger** (managing customer credit, manual charges, and payments)
+- **Analytics & Documents** (generating PDF invoices and Weekly PPTX Sales Decks)
 
-**Database:**
-- SQLite with `WAL` (Write-Ahead Logging) mode enabled to allow concurrent reads and writes, ensuring data integrity during parallel operations.
+## 🛠️ The 100% Free Tech Stack
 
-## 🧠 Handling the "Hard Parts"
+This project was built strictly adhering to the requirement of using a completely free, durable, and highly capable technology stack:
 
-### 1. Grounding (No hallucination)
-The system prompt strictly forbids guessing prices, stock, or GST rates. The LLM must call `search_product` to find real SKUs and their details, and then pass those exact SKUs into the billing and inventory tools. 
+- **Harness:** `pydantic-ai` 🧠
+  - *Why?* Provides a clean, modern, type-safe, agent-first approach without the heavy boilerplate of rigid node-based state machines (like LangGraph).
+- **LLM Engine:** `Groq API` ⚡
+  - *Why?* Lightning-fast tool-calling (Llama 3 / GPT-OSS) allowing the agent to perform multi-step database updates gracefully. (Fallback to `Gemini 1.5 Flash`).
+- **Database:** `SQLite` 🗄️
+  - *Why?* Built directly into Python, completely free, and configured with `WAL` (Write-Ahead Logging) to provide a durable memory that survives restarts and handles concurrency flawlessly.
+- **Interface:** `Telegram Bot API` 💬
+  - *Why?* Zero cost, natively supports file sharing (PDF/PPTX), and extremely accessible for small business owners.
 
-### 2. Oversell Guard
-Stock validation happens entirely in the tool/database layer, not the prompt. 
-- `add_item_to_bill` checks `stock_qty >= quantity` before adding an item to the draft.
-- `finalize_bill` re-checks the stock for *all items in the cart* immediately before the atomic stock decrement. If any item is short, the transaction is rolled back and an error is returned to the LLM.
+---
 
-### 3. GST Correctness
-GST calculations (CGST/SGST split, rounding) are strictly handled in Python (`calculate_gst` in `tools/billing.py`). Every product has an HSN code and tax slab stored in SQLite. The LLM never computes taxes. The generated PDF invoice includes the itemized GST breakup as required by Indian law.
+## 🧠 Engineering Solutions to the "Hard Parts"
 
-### 4. Multi-turn Bills
-A `bills` table tracks bills in a `draft` state. `add_item_to_bill` and `edit_bill_item` modify the draft. Draft bills **do not** decrement stock. Only when `finalize_bill` is called does the system lock the bill and decrement the inventory.
+We didn't just build a chatbot; we built a rigorous, stateful backend application orchestrated by an LLM.
 
-### 5. Idempotency (Telegram Redeliveries)
-The Telegram bot passes the unique `update.message.message_id` to the agent, which uses it as the `txn_id` when calling `finalize_bill`. 
-The `finalize_bill` tool does an atomic `SAVEPOINT check_txn` query. If the `txn_id` already exists, it returns a success message without double-billing or double-decrementing stock.
+### 🛡️ 1. Oversell Guard & Grounding
+The LLM is strictly forbidden from guessing SKUs, prices, or taxes. It must use the `search_product` tool to fetch reality. 
+- **The Guard:** Stock validation happens entirely in the tool/database layer, not the prompt. If the user asks for 300 packets but only 150 exist, the `add_item_to_bill` tool explicitly blocks it and returns an error back to the LLM to inform the user.
+- **Below-Cost Guard:** `finalize_bill` strictly checks that no item is sold below its `cost_price`.
 
-### 6. Concurrency
-- **SQLite WAL Mode**: Enabled on startup to allow better concurrent access.
-- **`BEGIN IMMEDIATE`**: Used in all stock-modifying and billing finalization queries to serialize writes.
-- **Atomic Decrement**: `UPDATE products SET stock_qty = stock_qty - ? WHERE stock_qty >= ?` ensures that race conditions between the `SELECT` check and the `UPDATE` cannot result in negative stock.
+### 🔄 2. Concurrency & Race Conditions
+- **WAL Mode:** Enabled on SQLite startup for concurrent read/writes.
+- **`BEGIN IMMEDIATE`:** Used to lock the database during critical stock modifications.
+- **Atomic Decrement:** The query `UPDATE products SET stock_qty = stock_qty - ? WHERE stock_qty >= ?` acts as an absolute final guard against race conditions that could lead to negative stock.
 
-### 7. Real Artifacts
-- **PDF Invoices**: Generated using `reportlab`. Pulls finalized bill data from SQLite, formats it as a Tax Invoice with HSN codes, SGST/CGST columns, and totals.
-- **PPTX Decks**: Generated using `python-pptx`. Queries SQLite for top-selling items and payment mode breakdowns, inserting native clustered column and pie charts into the slide deck.
+### 🧾 3. Idempotency (Preventing Double-Billing)
+Network glitches or users tapping buttons twice shouldn't result in double-billing.
+- The Telegram `message_id` is passed into the `AgentDeps` context and used as a unique `txn_id`.
+- The `finalize_bill` tool enforces a `UNIQUE(txn_id)` constraint via a `SAVEPOINT` query. If the same message triggers finalization twice, it is silently ignored, preventing double-decrementing of stock or double-charging.
 
-### 8. Memory Across Sessions
-- `tools/preferences.py` saves user preferences (e.g., default payment mode) into a SQLite `preferences` table.
-- When `/new` is called, the Telegram bot clears the in-memory chat history (giving the LLM a blank slate) but the persistent SQLite preferences remain. These are injected into the system prompt on every new message, ensuring the store "remembers" how the owner works.
+### 💬 4. Stateful Multi-Turn Bills
+Users change their minds. The `bills` table tracks active drafts. 
+Tools like `add_item_to_bill` and `edit_bill_item` modify this draft without touching inventory. Stock is only ever decremented when `finalize_bill` is explicitly called.
 
-## 🚀 How to Run
+### 📊 5. Real Artifact Generation
+The LLM orchestrates the creation of real files using Python libraries, completely offline:
+- **PDF Invoices (`reportlab`)**: Pulls finalized bill data from SQLite, formatting it as a standard Tax Invoice with correct HSN codes and SGST/CGST split calculations.
+- **Weekly Decks (`python-pptx`)**: Queries the SQLite database for top-selling items and payment mode breakdowns, rendering native clustered column charts and pie charts into a slide deck.
 
-1. Clone this repository.
-2. Create a virtual environment and install dependencies:
+### 🧠 6. Durable Memory Across Sessions
+- User preferences (e.g., `"always assume UPI"`, `"my default atta is Aashirvaad 5kg"`) are parsed by the agent and saved to a durable `preferences` table.
+- When the chat is cleared via `/new`, the short-term conversation context is wiped, but the persistent SQLite preferences are dynamically injected into the system prompt on every new message. The agent *truly remembers* the owner's habits across sessions.
+
+---
+
+## 🚀 Getting Started
+
+1. **Clone & Setup:**
    ```bash
+   git clone https://github.com/Saravanan460/nebula-kirana-agent.git
+   cd nebula-kirana-agent
    python -m venv venv
    .\venv\Scripts\pip install -r requirements.txt
    ```
-3. Set up the `.env` file with your API keys:
+
+2. **Configure Environment:**
+   Create a `.env` file in the root directory:
    ```env
-   TELEGRAM_BOT_TOKEN=your_token
-   GROQ_API_KEY=your_key
-   GEMINI_API_KEY=your_key (fallback)
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+   GROQ_API_KEY=your_groq_api_key
+   GEMINI_API_KEY=your_gemini_api_key
    ```
-4. Run the application:
+
+3. **Run the Agent:**
    ```bash
    python main.py
    ```
-   *(This will automatically initialize and seed the SQLite database if it doesn't exist, and start the Telegram bot).*
+   *Note: This will automatically initialize the database, seed it with initial products, and start the Telegram bot via polling.*
 
-5. Use **Ngrok** or **Cloudflare Tunnels** to expose your local bot if required by your setup, though python-telegram-bot's `run_polling()` works fine locally without webhooks for testing.
+4. **Start Chatting!**
+   Open your Telegram bot and send `/start`.
 
 ---
-**Prepared for Nebula KnowLab Engineering Task**
+*Developed by Saravana for Nebula.*
