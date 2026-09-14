@@ -1,11 +1,12 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables FIRST
 load_dotenv()
 
 from database.schema import setup_db
 from database.seed_data import seed_db
+from agent.harness import init_agent
 from telegram_bot.bot import run_bot
 
 def main():
@@ -14,7 +15,10 @@ def main():
     setup_db()
     seed_db()
     
-    # 2. Start Telegram Bot
+    # 2. Initialize the Agent with the correct model (must be after dotenv)
+    init_agent()
+    
+    # 3. Start Telegram Bot
     run_bot()
 
 if __name__ == "__main__":

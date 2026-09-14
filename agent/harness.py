@@ -13,25 +13,32 @@ from tools.preferences import set_preference, get_preferences
 from tools.documents import generate_invoice_pdf, generate_analysis_pptx
 from tools.analytics import daily_summary, close_day
 
-# Determine which model to use based on env vars
-if os.environ.get("GROQ_API_KEY"):
-    model = GroqModel('llama-3.3-70b-versatile')
-elif os.environ.get("GEMINI_API_KEY"):
-    model = GoogleModel('gemini-1.5-flash')
-else:
-    # Fallback to a dummy model if keys are missing (will fail on execution but allows import)
-    model = GoogleModel('gemini-1.5-flash')
-
 @dataclass
 class AgentDeps:
     chat_id: int
     message_id: int
 
+def _select_model():
+    """Select the model AFTER dotenv has been loaded. Called from main.py."""
+    if os.environ.get("GROQ_API_KEY"):
+        return GroqModel('llama-3.3-70b-versatile')
+    elif os.environ.get("GEMINI_API_KEY"):
+        return GoogleModel('gemini-2.0-flash')
+    else:
+        raise RuntimeError("No API key found. Set GROQ_API_KEY or GEMINI_API_KEY in .env")
+
+# Agent is created with a placeholder; model is swapped in init_agent()
 agent = Agent(
-    model,
+    'test',  # placeholder — replaced before first use
     system_prompt="You are a helpful Kirana store agent.",
     deps_type=AgentDeps
 )
+
+def init_agent():
+    """Must be called after load_dotenv(). Sets the real model on the agent."""
+    model = _select_model()
+    agent._model = model
+    print(f"Agent initialized with model: {model}")
 
 @agent.system_prompt
 def add_dynamic_system_prompt(ctx: RunContext[AgentDeps]) -> str:
@@ -148,3 +155,4 @@ def tool_daily_summary(ctx: RunContext[AgentDeps], target_date: str = None) -> s
 def tool_close_day(ctx: RunContext[AgentDeps]) -> str:
     """Snapshot today's sales into the daily_close table."""
     return close_day(ctx.deps.chat_id)
+
