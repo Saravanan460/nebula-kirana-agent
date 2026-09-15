@@ -49,7 +49,9 @@ def generate_invoice_pdf(chat_id: int, bill_id: int) -> str:
     c.drawString(50, 800, shop_name)
     c.setFont("Helvetica", 10)
     c.drawString(50, 785, f"GSTIN: {gstin}")
-    c.drawString(50, 770, f"Date: {bill['finalized_at']}")
+    date_obj = datetime.fromisoformat(bill['finalized_at'])
+    formatted_date = date_obj.strftime("%Y-%m-%d %I:%M %p")
+    c.drawString(50, 770, f"Date: {formatted_date}")
     c.drawString(400, 800, f"TAX INVOICE #{bill_id}")
     
     if bill['payment_mode'] == 'khata':

@@ -2,13 +2,13 @@ from database.connection import get_db_cursor, db_lock
 import uuid
 from datetime import datetime
 
-def calculate_gst(base_amount: float, gst_rate: float) -> tuple[float, float, float]:
-    """Returns (cgst, sgst, total_with_tax). Intra-state split."""
-    gst_amount = base_amount * (gst_rate / 100)
+def calculate_gst(mrp_total: float, gst_rate: float) -> tuple[float, float, float]:
+    """Returns (cgst, sgst, total_with_tax). In India, MRP is inclusive of GST."""
+    base_amount = mrp_total / (1 + (gst_rate / 100))
+    gst_amount = mrp_total - base_amount
     cgst = round(gst_amount / 2, 2)
     sgst = round(gst_amount / 2, 2)
-    total = round(base_amount + cgst + sgst, 2)
-    return cgst, sgst, total
+    return cgst, sgst, round(mrp_total, 2)
 
 def start_bill(chat_id: int) -> str:
     """Start a new draft bill for the chat. Cancels any existing draft."""
