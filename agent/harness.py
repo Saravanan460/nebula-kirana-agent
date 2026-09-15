@@ -21,7 +21,7 @@ class AgentDeps:
 def _select_model():
     """Select the model AFTER dotenv has been loaded. Called from main.py."""
     if os.environ.get("GROQ_API_KEY"):
-        return GroqModel('llama-3.3-70b-versatile')
+        return GroqModel('openai/gpt-oss-120b')
     elif os.environ.get("GEMINI_API_KEY"):
         return GoogleModel('gemini-2.0-flash')
     else:
