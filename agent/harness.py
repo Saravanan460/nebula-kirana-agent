@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.groq import GroqModel
 from pydantic_ai.models.google import GoogleModel
+from groq import Groq
 
 
 from agent.prompts import SYSTEM_PROMPT
@@ -22,7 +23,10 @@ def _build_models():
     """Build available models AFTER dotenv has been loaded."""
     models = []
     if os.environ.get("GROQ_API_KEY"):
-        models.append(("groq", GroqModel('openai/gpt-oss-120b')))
+        # max_retries=0 disables Groq SDK's internal 429 retry loop
+        # so our fallback handler can instantly switch to Gemini
+        groq_client = Groq(api_key=os.environ["GROQ_API_KEY"], max_retries=0)
+        models.append(("groq", GroqModel('openai/gpt-oss-120b', groq_client=groq_client)))
     if os.environ.get("GEMINI_API_KEY"):
         models.append(("gemini", GoogleModel('gemini-3.6-flash')))
     if not models:
