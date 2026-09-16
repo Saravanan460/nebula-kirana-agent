@@ -35,7 +35,7 @@ def add_item_to_bill(chat_id: int, sku: str, quantity: float) -> str:
         bill_id = bill_row['id']
         
         # Get product and verify stock
-        cursor.execute("SELECT id, name, mrp, gst_rate, stock_qty FROM products WHERE sku = ? AND is_active = 1", (sku,))
+        cursor.execute("SELECT id, name, mrp, gst_rate, stock_qty FROM products WHERE sku = ? AND chat_id = ? AND is_active = 1", (sku, chat_id))
         prod_row = cursor.fetchone()
         if not prod_row:
             return f"❌ Error: Product with SKU '{sku}' not found."
@@ -87,7 +87,7 @@ def edit_bill_item(chat_id: int, sku: str, new_quantity: float) -> str:
             return "❌ Error: No active draft bill."
         bill_id = bill_row['id']
         
-        cursor.execute("SELECT id, name, mrp, gst_rate, stock_qty FROM products WHERE sku = ?", (sku,))
+        cursor.execute("SELECT id, name, mrp, gst_rate, stock_qty FROM products WHERE sku = ? AND chat_id = ?", (sku, chat_id))
         prod_row = cursor.fetchone()
         if not prod_row:
             return f"❌ Error: Product with SKU '{sku}' not found."
@@ -228,7 +228,7 @@ def finalize_bill(chat_id: int, payment_mode: str, khata_customer: str = None, t
             subtotal = grand_total - total_cgst - total_sgst
             
             for item in items:
-                cursor.execute("SELECT name, stock_qty, cost_price, mrp FROM products WHERE id = ?", (item['product_id'],))
+                cursor.execute("SELECT name, stock_qty, cost_price, mrp FROM products WHERE id = ? AND chat_id = ?", (item['product_id'], chat_id))
                 prod = cursor.fetchone()
                 if prod['stock_qty'] < item['quantity']:
                     # Trigger rollback via exception
@@ -242,9 +242,9 @@ def finalize_bill(chat_id: int, payment_mode: str, khata_customer: str = None, t
                     """
                     UPDATE products 
                     SET stock_qty = stock_qty - ? 
-                    WHERE id = ? AND stock_qty >= ?
+                    WHERE id = ? AND chat_id = ? AND stock_qty >= ?
                     """,
-                    (item['quantity'], item['product_id'], item['quantity'])
+                    (item['quantity'], item['product_id'], chat_id, item['quantity'])
                 )
                 if cursor.rowcount == 0:
                     raise ValueError("Failed to decrement stock (concurrency issue).")

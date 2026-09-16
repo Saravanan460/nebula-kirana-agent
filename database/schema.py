@@ -6,8 +6,9 @@ SCHEMA_SQL = """
 -- Products / Inventory
 CREATE TABLE IF NOT EXISTS products (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id     INTEGER NOT NULL,
     name        TEXT NOT NULL,              -- "Aashirvaad Atta 5kg"
-    sku         TEXT UNIQUE NOT NULL,       -- "AASH-ATTA-5KG"
+    sku         TEXT NOT NULL,              -- "AASH-ATTA-5KG"
     hsn_code    TEXT NOT NULL,              -- "1101" 
     unit        TEXT NOT NULL DEFAULT 'packet', -- kg/g/litre/ml/packet/dozen/piece
     is_loose    BOOLEAN NOT NULL DEFAULT 0, -- loose items sold by weight
@@ -17,7 +18,8 @@ CREATE TABLE IF NOT EXISTS products (
     stock_qty   REAL NOT NULL DEFAULT 0,   -- current stock (can be fractional for loose)
     reorder_level REAL NOT NULL DEFAULT 10,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    is_active   BOOLEAN NOT NULL DEFAULT 1  -- soft delete only, never hard delete
+    is_active   BOOLEAN NOT NULL DEFAULT 1, -- soft delete only, never hard delete
+    UNIQUE(chat_id, sku)
 );
 
 -- Bills (multi-turn draft -> finalized)

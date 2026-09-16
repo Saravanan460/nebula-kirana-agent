@@ -1,6 +1,6 @@
 from database.connection import get_db_cursor, db_lock
 
-def add_product(name: str, sku: str, hsn_code: str, unit: str, is_loose: bool, cost_price: float, mrp: float, gst_rate: float, reorder_level: float = 10.0) -> str:
+def add_product(chat_id: int, name: str, sku: str, hsn_code: str, unit: str, is_loose: bool, cost_price: float, mrp: float, gst_rate: float, reorder_level: float = 10.0) -> str:
     """
     Add a new product (SKU) to the inventory.
     Args:
@@ -23,10 +23,10 @@ def add_product(name: str, sku: str, hsn_code: str, unit: str, is_loose: bool, c
         with get_db_cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO products (name, sku, hsn_code, unit, is_loose, cost_price, mrp, gst_rate, reorder_level)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (chat_id, name, sku, hsn_code, unit, is_loose, cost_price, mrp, gst_rate, reorder_level)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (name, sku, hsn_code, unit, is_loose, cost_price, mrp, gst_rate, reorder_level)
+                (chat_id, name, sku, hsn_code, unit, is_loose, cost_price, mrp, gst_rate, reorder_level)
             )
             return f"✅ Product '{name}' added successfully with SKU '{sku}'."
     except Exception as e:
@@ -34,7 +34,7 @@ def add_product(name: str, sku: str, hsn_code: str, unit: str, is_loose: bool, c
             return f"❌ Error: Product with SKU '{sku}' already exists."
         return f"❌ Error adding product: {str(e)}"
 
-def receive_stock(sku: str, quantity: float, new_cost_price: float = None, new_mrp: float = None) -> str:
+def receive_stock(chat_id: int, sku: str, quantity: float, new_cost_price: float = None, new_mrp: float = None) -> str:
     """
     Receive new stock for an existing product. 
     Args:
@@ -50,7 +50,7 @@ def receive_stock(sku: str, quantity: float, new_cost_price: float = None, new_m
         with get_db_cursor() as cursor:
             cursor.execute("BEGIN IMMEDIATE")
             
-            cursor.execute("SELECT id, name, cost_price, mrp FROM products WHERE sku = ?", (sku,))
+            cursor.execute("SELECT id, name, cost_price, mrp FROM products WHERE sku = ? AND chat_id = ?", (sku, chat_id))
             row = cursor.fetchone()
             if not row:
                 return f"❌ Error: Product with SKU '{sku}' not found."
@@ -65,17 +65,17 @@ def receive_stock(sku: str, quantity: float, new_cost_price: float = None, new_m
                 """
                 UPDATE products 
                 SET stock_qty = stock_qty + ?, cost_price = ?, mrp = ?
-                WHERE sku = ?
+                WHERE sku = ? AND chat_id = ?
                 """,
-                (quantity, cost, mrp, sku)
+                (quantity, cost, mrp, sku, chat_id)
             )
             
-            cursor.execute("SELECT stock_qty FROM products WHERE sku = ?", (sku,))
+            cursor.execute("SELECT stock_qty FROM products WHERE sku = ? AND chat_id = ?", (sku, chat_id))
             new_stock = cursor.fetchone()['stock_qty']
             
             return f"✅ Received {quantity} units of '{row['name']}'. New stock: {new_stock}."
 
-def check_stock(sku: str = None) -> str:
+def check_stock(chat_id: int, sku: str = None) -> str:
     """
     Check stock for a specific SKU. If sku is None, DO NOT USE to get all stock. Use search_product instead for finding items.
     """
@@ -83,14 +83,14 @@ def check_stock(sku: str = None) -> str:
         return "❌ Error: Please provide an SKU. Use search_product to find SKUs."
         
     with get_db_cursor() as cursor:
-        cursor.execute("SELECT name, stock_qty, unit, mrp FROM products WHERE sku = ?", (sku,))
+        cursor.execute("SELECT name, stock_qty, unit, mrp FROM products WHERE sku = ? AND chat_id = ?", (sku, chat_id))
         row = cursor.fetchone()
         if not row:
             return f"❌ Error: Product with SKU '{sku}' not found."
         
         return f"📦 {row['name']} - Stock: {row['stock_qty']} {row['unit']} (MRP: ₹{row['mrp']})"
 
-def low_stock_report() -> str:
+def low_stock_report(chat_id: int) -> str:
     """
     Get a list of all products that are at or below their reorder level.
     """
@@ -99,9 +99,10 @@ def low_stock_report() -> str:
             """
             SELECT name, sku, stock_qty, reorder_level 
             FROM products 
-            WHERE stock_qty <= reorder_level AND is_active = 1
+            WHERE chat_id = ? AND stock_qty <= reorder_level AND is_active = 1
             ORDER BY (stock_qty - reorder_level) ASC
-            """
+            """,
+            (chat_id,)
         )
         rows = cursor.fetchall()
         
@@ -113,20 +114,23 @@ def low_stock_report() -> str:
             report += f"- {r['name']} (SKU: {r['sku']}) - Stock: {r['stock_qty']} (Reorder at: {r['reorder_level']})\n"
         return report
 
-def search_product(query: str) -> str:
+def search_product(chat_id: int, query: str) -> str:
     """
-    Fuzzy search for products by name to find their SKUs and details.
+    Fuzzy search for products by name or sku to find their details.
     Use this when the user mentions a product name to get the exact SKU for billing.
     """
+    # Make search more robust against space/hyphen differences (e.g. "Parle g" vs "Parle-G")
+    safe_query = query.replace(' ', '%').replace('-', '%')
+    
     with get_db_cursor() as cursor:
         cursor.execute(
             """
             SELECT name, sku, stock_qty, mrp, unit 
             FROM products 
-            WHERE name LIKE ? AND is_active = 1
+            WHERE chat_id = ? AND (name LIKE ? OR sku LIKE ?) AND is_active = 1
             LIMIT 10
             """,
-            (f"%{query}%",)
+            (chat_id, f"%{safe_query}%", f"%{safe_query}%")
         )
         rows = cursor.fetchall()
         
@@ -134,6 +138,30 @@ def search_product(query: str) -> str:
             return f"❌ No products found matching '{query}'."
             
         results = [f"Found {len(rows)} products matching '{query}':"]
+        for r in rows:
+            results.append(f"- {r['name']} | SKU: {r['sku']} | ₹{r['mrp']} | Stock: {r['stock_qty']} {r['unit']}")
+        return "\n".join(results)
+
+def list_all_products(chat_id: int) -> str:
+    """
+    List all products in the inventory with their current stock levels.
+    """
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT name, sku, stock_qty, mrp, unit 
+            FROM products 
+            WHERE chat_id = ? AND is_active = 1
+            ORDER BY name ASC
+            """,
+            (chat_id,)
+        )
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return "❌ No products found in your inventory."
+            
+        results = [f"📦 Your Entire Inventory ({len(rows)} items):"]
         for r in rows:
             results.append(f"- {r['name']} | SKU: {r['sku']} | ₹{r['mrp']} | Stock: {r['stock_qty']} {r['unit']}")
         return "\n".join(results)

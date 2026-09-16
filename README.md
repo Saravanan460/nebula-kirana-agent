@@ -10,7 +10,7 @@
 ## 🌟 Overview
 
 The **Nebula Kirana Agent** completely replaces complex POS software. The store owner runs their entire shop simply by chatting with this agent on Telegram. It handles:
-- **Inventory Management** (tracking stock, low-stock alerts)
+- **Inventory Management** (tracking stock, low-stock alerts, listing all products)
 - **GST-Compliant Billing** (multi-item drafts, edits, finalization)
 - **Khata Ledger** (managing customer credit, manual charges, and payments)
 - **Analytics & Documents** (generating PDF invoices and Weekly PPTX Sales Decks)
@@ -61,6 +61,11 @@ The LLM orchestrates the creation of real files using Python libraries, complete
 ### 🧠 6. Durable Memory Across Sessions
 - User preferences (e.g., `"always assume UPI"`, `"my default atta is Aashirvaad 5kg"`) are parsed by the agent and saved to a durable `preferences` table.
 - When the chat is cleared via `/new`, the short-term conversation context is wiped, but the persistent SQLite preferences are dynamically injected into the system prompt on every new message. The agent *truly remembers* the owner's habits across sessions.
+
+### 🏢 7. Multi-Tenant Sandbox Architecture (Perfect for Reviewers)
+The assignment requires a live bot that multiple Nebula engineers can test simultaneously. If the inventory was completely global, reviewers testing stock decrements would collide and corrupt each other's test state. 
+- **The Solution:** The entire database schema—including `products` (inventory), `bills`, `khata`, and `preferences`—is strictly isolated by Telegram `chat_id`. 
+- **Auto-Seeding:** The moment a reviewer hits `/start`, their completely private store is instantly pre-seeded with the exact mandatory assignment SKUs (Aashirvaad Atta, Maggi, Tata Salt, etc.). Every reviewer gets a flawless, interference-free grading sandbox.
 
 ---
 

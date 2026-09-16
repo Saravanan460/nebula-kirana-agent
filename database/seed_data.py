@@ -17,33 +17,39 @@ SEED_PRODUCTS = [
     ("Cadbury Dairy Milk 50g", "CADBURY-DM-50G", "1806", "packet", False, 35, 50, 18.0, 80, 20)
 ]
 
-def seed_db():
+def seed_db(chat_id: int):
     conn = get_connection()
     try:
         cursor = conn.cursor()
         
-        # Check if already seeded
-        cursor.execute("SELECT COUNT(*) FROM products")
+        # Check if already seeded for this chat_id
+        cursor.execute("SELECT COUNT(*) FROM products WHERE chat_id = ?", (chat_id,))
         if cursor.fetchone()[0] > 0:
-            print("Database already contains products. Skipping seed.")
+            print(f"Database already contains products for chat_id {chat_id}. Skipping seed.")
             return
+
+        # Prepare products with chat_id prepended
+        products_to_insert = [
+            (chat_id,) + product for product in SEED_PRODUCTS
+        ]
 
         cursor.executemany(
             """
             INSERT INTO products (
-                name, sku, hsn_code, unit, is_loose, 
+                chat_id, name, sku, hsn_code, unit, is_loose, 
                 cost_price, mrp, gst_rate, stock_qty, reorder_level
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            SEED_PRODUCTS
+            products_to_insert
         )
         conn.commit()
-        print(f"Successfully seeded {len(SEED_PRODUCTS)} products.")
+        print(f"Successfully seeded {len(SEED_PRODUCTS)} products for chat_id {chat_id}.")
     except Exception as e:
         conn.rollback()
-        print(f"Error seeding database: {e}")
+        print(f"Error seeding database for chat_id {chat_id}: {e}")
     finally:
         conn.close()
 
 if __name__ == "__main__":
-    seed_db()
+    # Test seed with dummy chat_id
+    seed_db(123456789)

@@ -6,7 +6,7 @@ from pydantic_ai.models.google import GoogleModel
 
 
 from agent.prompts import SYSTEM_PROMPT
-from tools.inventory import add_product, receive_stock, check_stock, low_stock_report, search_product
+from tools.inventory import add_product, receive_stock, check_stock, low_stock_report, search_product, list_all_products
 from tools.billing import start_bill, add_item_to_bill, edit_bill_item, view_bill, finalize_bill, cancel_bill
 from tools.khata import create_khata, charge_khata, pay_khata, check_khata
 from tools.preferences import set_preference, get_preferences
@@ -52,27 +52,34 @@ def add_dynamic_system_prompt(ctx: RunContext[AgentDeps]) -> str:
 @agent.tool
 def tool_add_product(ctx: RunContext[AgentDeps], name: str, sku: str, hsn_code: str, unit: str, is_loose: bool, cost_price: float, mrp: float, gst_rate: float, reorder_level: float = 10.0) -> str:
     """Add a new product (SKU) to the inventory."""
-    return add_product(name, sku, hsn_code, unit, is_loose, cost_price, mrp, gst_rate, reorder_level)
+    return add_product(ctx.deps.chat_id, name, sku, hsn_code, unit, is_loose, cost_price, mrp, gst_rate, reorder_level)
 
 @agent.tool
 def tool_receive_stock(ctx: RunContext[AgentDeps], sku: str, quantity: float, new_cost_price: float = None, new_mrp: float = None) -> str:
-    """Receive new stock for an existing product."""
-    return receive_stock(sku, quantity, new_cost_price, new_mrp)
+    """Receive new stock for an existing product. 
+    IMPORTANT: You must provide the EXACT SKU. If the user provides a product name, use tool_search_product first to find the exact SKU."""
+    return receive_stock(ctx.deps.chat_id, sku, quantity, new_cost_price, new_mrp)
 
 @agent.tool
 def tool_check_stock(ctx: RunContext[AgentDeps], sku: str) -> str:
-    """Check stock for a specific SKU."""
-    return check_stock(sku)
+    """Check stock for a specific SKU. 
+    IMPORTANT: You must provide the EXACT SKU. If the user provides a product name, use tool_search_product first to find the exact SKU. DO NOT guess the SKU."""
+    return check_stock(ctx.deps.chat_id, sku)
 
 @agent.tool
 def tool_low_stock_report(ctx: RunContext[AgentDeps]) -> str:
     """Get a list of all products that are at or below their reorder level."""
-    return low_stock_report()
+    return low_stock_report(ctx.deps.chat_id)
 
 @agent.tool
 def tool_search_product(ctx: RunContext[AgentDeps], query: str) -> str:
     """Fuzzy search for products by name to find their SKUs and details."""
-    return search_product(query)
+    return search_product(ctx.deps.chat_id, query)
+
+@agent.tool
+def tool_list_all_products(ctx: RunContext[AgentDeps]) -> str:
+    """List all products available in the inventory."""
+    return list_all_products(ctx.deps.chat_id)
 
 # Register Billing Tools
 @agent.tool
@@ -82,12 +89,14 @@ def tool_start_bill(ctx: RunContext[AgentDeps]) -> str:
 
 @agent.tool
 def tool_add_item_to_bill(ctx: RunContext[AgentDeps], sku: str, quantity: float) -> str:
-    """Add a product to the current draft bill."""
+    """Add a product to the current draft bill.
+    IMPORTANT: You must provide the EXACT SKU. If the user provides a product name, use tool_search_product first to find the exact SKU."""
     return add_item_to_bill(ctx.deps.chat_id, sku, quantity)
 
 @agent.tool
 def tool_edit_bill_item(ctx: RunContext[AgentDeps], sku: str, new_quantity: float) -> str:
-    """Edit the quantity of an item in the draft bill. Pass 0 to remove."""
+    """Edit the quantity of an item in the draft bill. Pass 0 to remove.
+    IMPORTANT: You must provide the EXACT SKU."""
     return edit_bill_item(ctx.deps.chat_id, sku, new_quantity)
 
 @agent.tool

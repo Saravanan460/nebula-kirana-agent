@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from agent.harness import agent, AgentDeps
 from tools.preferences import clear_conversation_memory
+from database.seed_data import seed_db
 
 # Telegram max message length
 MAX_MSG_LEN = 4096
@@ -22,6 +23,8 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /start command."""
     chat_id = update.effective_chat.id
     CHAT_HISTORIES[chat_id] = []
+    # Seed the products for this user
+    seed_db(chat_id)
     await update.message.reply_text(
         "👋 Welcome to Nebula Kirana Agent!\n\n"
         "I am your operations agent. You can tell me to receive stock, cut bills, check khata, and more."
