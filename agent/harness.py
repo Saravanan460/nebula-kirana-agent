@@ -28,9 +28,9 @@ def _build_models():
         # so our fallback handler can instantly switch to Gemini
         async_groq = AsyncGroq(api_key=os.environ["GROQ_API_KEY"], max_retries=0)
         provider = GroqProvider(groq_client=async_groq)
-        models.append(("groq_llama", GroqModel('llama-3.1-8b-instant', provider=provider)))
+        models.append(("groq", GroqModel('openai/gpt-oss-20b', provider=provider)))
     if os.environ.get("GEMINI_API_KEY"):
-        models.append(("gemini_flash", GoogleModel('gemini-3-flash')))
+        models.append(("gemini", GoogleModel('gemini-3.6-flash')))
     if not models:
         raise RuntimeError("No API key found. Set GROQ_API_KEY or GEMINI_API_KEY in .env")
     return models
