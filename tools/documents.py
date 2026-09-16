@@ -7,6 +7,7 @@ from pptx.enum.chart import XL_CHART_TYPE
 from pptx.chart.data import CategoryChartData
 from database.connection import get_db_cursor
 from tools.preferences import get_preferences
+from tools.file_queue import queue_file
 
 ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "artifacts")
 if not os.path.exists(ARTIFACTS_DIR):
@@ -107,7 +108,8 @@ def generate_invoice_pdf(chat_id: int, bill_id: int) -> str:
     c.drawString(480, y, f"Rs. {bill['grand_total']}")
     
     c.save()
-    return f"📄 Invoice PDF generated at {pdf_path}. [FILE_READY:{pdf_path}]"
+    queue_file(chat_id, pdf_path)
+    return f"📄 Invoice PDF for Bill #{bill_id} has been generated and will be sent as a downloadable file."
 
 def generate_analysis_pptx(chat_id: int) -> str:
     """Generate a weekly sales analysis PPTX deck."""
@@ -177,4 +179,5 @@ def generate_analysis_pptx(chat_id: int) -> str:
     
     pptx_path = os.path.join(ARTIFACTS_DIR, f"Analysis_{chat_id}_{int(datetime.now().timestamp())}.pptx")
     prs.save(pptx_path)
-    return f"📊 Analysis PPTX generated at {pptx_path}. [FILE_READY:{pptx_path}]"
+    queue_file(chat_id, pptx_path)
+    return f"📊 Weekly Sales Analysis deck has been generated and will be sent as a downloadable file."

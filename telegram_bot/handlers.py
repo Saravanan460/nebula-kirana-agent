@@ -3,8 +3,9 @@ import re
 from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
-from agent.harness import agent, AgentDeps
+from agent.harness import agent, AgentDeps, get_fallback_models
 from tools.preferences import clear_conversation_memory
+from tools.file_queue import pop_files
 from database.seed_data import seed_db
 
 # Telegram max message length
@@ -19,6 +20,8 @@ async def _send_long_text(update: Update, text: str):
     """Split and send text that may exceed Telegram's 4096 char limit."""
     # Convert standard markdown bold to HTML bold for Telegram
     formatted_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    # Strip any leftover [FILE_READY:...] markers the LLM might echo
+    formatted_text = re.sub(r'\[FILE_READY:.+?\]', '', formatted_text)
     
     for i in range(0, len(formatted_text), MAX_MSG_LEN):
         try:
@@ -66,13 +69,33 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
     
     try:
-        # Run agent
+        # Run agent with automatic model fallback on rate limits
         deps = AgentDeps(chat_id=chat_id, message_id=update.message.message_id)
-        result = await agent.run(
-            user_text,
-            deps=deps,
-            message_history=CHAT_HISTORIES[chat_id]
-        )
+        models = get_fallback_models()
+        last_error = None
+        result = None
+        
+        for model_name, model in models:
+            try:
+                agent._model = model
+                result = await agent.run(
+                    user_text,
+                    deps=deps,
+                    message_history=CHAT_HISTORIES[chat_id]
+                )
+                break  # Success — stop trying
+            except Exception as e:
+                err_str = str(e)
+                # If it's a rate limit (429) or overload (503), try next model
+                if '429' in err_str or '503' in err_str or 'Too Many Requests' in err_str or 'quota' in err_str.lower():
+                    print(f"⚠️ {model_name} rate-limited, trying next model...")
+                    last_error = e
+                    continue
+                else:
+                    raise  # Non-rate-limit error, bubble up immediately
+        
+        if result is None:
+            raise last_error  # All models failed
         
         # Update history (keep last 20 messages to avoid context bloat)
         all_msgs = result.all_messages()
@@ -80,17 +103,13 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         reply_text = result.output
         
-        # Check for file attachments
-        file_match = re.search(r"\[FILE_READY:(.+?)\]", reply_text)
-        if file_match:
-            file_path = file_match.group(1)
-            reply_text = reply_text.replace(file_match.group(0), "")
-            
-            # Send text first
-            if reply_text.strip():
-                await _send_long_text(update, reply_text.strip())
-                
-            # Send Document
+        # Send the text reply
+        if reply_text.strip():
+            await _send_long_text(update, reply_text.strip())
+        
+        # Send any queued files (PDF, PPTX) via the side-channel
+        pending = pop_files(chat_id)
+        for file_path in pending:
             try:
                 with open(file_path, 'rb') as f:
                     await update.message.reply_document(
@@ -99,9 +118,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
             except Exception as e:
                 await update.message.reply_text(f"❌ Failed to send document: {str(e)}")
-        else:
-            # Just send text
-            await _send_long_text(update, reply_text)
         
     except Exception as e:
         import traceback

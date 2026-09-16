@@ -18,14 +18,16 @@ class AgentDeps:
     chat_id: int
     message_id: int
 
-def _select_model():
-    """Select the model AFTER dotenv has been loaded. Called from main.py."""
+def _build_models():
+    """Build available models AFTER dotenv has been loaded."""
+    models = []
     if os.environ.get("GROQ_API_KEY"):
-        return GroqModel('openai/gpt-oss-120b')
-    elif os.environ.get("GEMINI_API_KEY"):
-        return GoogleModel('gemini-3.6-flash')
-    else:
+        models.append(("groq", GroqModel('openai/gpt-oss-120b')))
+    if os.environ.get("GEMINI_API_KEY"):
+        models.append(("gemini", GoogleModel('gemini-3.6-flash')))
+    if not models:
         raise RuntimeError("No API key found. Set GROQ_API_KEY or GEMINI_API_KEY in .env")
+    return models
 
 # Agent is created with a placeholder; model is swapped in init_agent()
 agent = Agent(
@@ -34,11 +36,20 @@ agent = Agent(
     deps_type=AgentDeps
 )
 
+# List of (name, model) tuples; first is primary, rest are fallbacks
+_available_models: list = []
+
 def init_agent():
     """Must be called after load_dotenv(). Sets the real model on the agent."""
-    model = _select_model()
-    agent._model = model
-    print(f"Agent initialized with model: {model}")
+    global _available_models
+    _available_models = _build_models()
+    agent._model = _available_models[0][1]
+    names = [m[0] for m in _available_models]
+    print(f"Agent initialized. Models: {names} (primary: {names[0]})")
+
+def get_fallback_models():
+    """Return list of (name, model) tuples for fallback handling."""
+    return _available_models
 
 @agent.system_prompt
 def add_dynamic_system_prompt(ctx: RunContext[AgentDeps]) -> str:
