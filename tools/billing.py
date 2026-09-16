@@ -13,13 +13,18 @@ def calculate_gst(mrp_total: float, gst_rate: float) -> tuple[float, float, floa
 def start_bill(chat_id: int) -> str:
     """Start a new draft bill for the chat. Cancels any existing draft."""
     with get_db_cursor() as cursor:
-        # Cancel any existing draft
-        cursor.execute("UPDATE bills SET status = 'cancelled' WHERE chat_id = ? AND status = 'draft'", (chat_id,))
+        # Check for existing draft
+        cursor.execute("SELECT id FROM bills WHERE chat_id = ? AND status = 'draft'", (chat_id,))
+        old_draft = cursor.fetchone()
+        cancelled_msg = ""
+        if old_draft:
+            cursor.execute("UPDATE bills SET status = 'cancelled' WHERE id = ?", (old_draft['id'],))
+            cancelled_msg = f" (⚠️ Previous draft Bill #{old_draft['id']} was auto-cancelled.)"
         
         # Create new draft
         cursor.execute("INSERT INTO bills (chat_id, status) VALUES (?, 'draft')", (chat_id,))
         bill_id = cursor.lastrowid
-        return f"✅ Started new draft bill (ID: {bill_id}). You can now add items."
+        return f"✅ Started new draft bill (ID: {bill_id}).{cancelled_msg} You can now add items."
 
 def add_item_to_bill(chat_id: int, sku: str, quantity: float) -> str:
     """Add a product to the current draft bill."""
