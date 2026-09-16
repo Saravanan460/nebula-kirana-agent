@@ -88,7 +88,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 err_str = str(e)
                 # If it's a rate limit (429) or overload (503), try next model
                 if '429' in err_str or '503' in err_str or 'Too Many Requests' in err_str or 'quota' in err_str.lower():
-                    print(f"⚠️ {model_name} rate-limited, trying next model...")
+                    print(f"RATE_LIMIT: {model_name} rate-limited, trying next model...")
                     last_error = e
                     continue
                 else:
