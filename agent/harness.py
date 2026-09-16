@@ -23,7 +23,7 @@ def _select_model():
     if os.environ.get("GROQ_API_KEY"):
         return GroqModel('openai/gpt-oss-120b')
     elif os.environ.get("GEMINI_API_KEY"):
-        return GoogleModel('gemini-2.0-flash')
+        return GoogleModel('gemini-3.6-flash')
     else:
         raise RuntimeError("No API key found. Set GROQ_API_KEY or GEMINI_API_KEY in .env")
 
