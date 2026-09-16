@@ -2,6 +2,7 @@ import os
 import re
 from telegram import Update
 from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
 from agent.harness import agent, AgentDeps
 from tools.preferences import clear_conversation_memory
 from database.seed_data import seed_db
@@ -16,8 +17,15 @@ CHAT_HISTORIES = {}
 
 async def _send_long_text(update: Update, text: str):
     """Split and send text that may exceed Telegram's 4096 char limit."""
-    for i in range(0, len(text), MAX_MSG_LEN):
-        await update.message.reply_text(text[i:i + MAX_MSG_LEN])
+    # Convert standard markdown bold to HTML bold for Telegram
+    formatted_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    
+    for i in range(0, len(formatted_text), MAX_MSG_LEN):
+        try:
+            await update.message.reply_text(formatted_text[i:i + MAX_MSG_LEN], parse_mode=ParseMode.HTML)
+        except Exception:
+            # Fallback to raw text if HTML parsing fails (e.g. unclosed tags)
+            await update.message.reply_text(formatted_text[i:i + MAX_MSG_LEN])
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the /start command."""
