@@ -92,7 +92,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
             # Send Document
             try:
-                await update.message.reply_document(document=open(file_path, 'rb'))
+                with open(file_path, 'rb') as f:
+                    await update.message.reply_document(
+                        document=f,
+                        filename=os.path.basename(file_path)
+                    )
             except Exception as e:
                 await update.message.reply_text(f"❌ Failed to send document: {str(e)}")
         else:
