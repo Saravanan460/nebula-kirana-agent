@@ -34,12 +34,12 @@ def daily_summary(chat_id: int, target_date: str = None) -> str:
         
         res = f"📊 Daily Summary ({target_date})\n"
         res += f"Total Bills: {totals['bills_count']}\n"
-        res += f"Total Sales: ₹{totals['grand_total'] or 0}\n"
-        res += f"Tax Collected: CGST ₹{totals['cgst'] or 0} | SGST ₹{totals['sgst'] or 0}\n\n"
+        res += f"Total Sales: ₹{totals['grand_total'] or 0:.2f}\n"
+        res += f"Tax Collected: CGST ₹{totals['cgst'] or 0:.2f} | SGST ₹{totals['sgst'] or 0:.2f}\n\n"
         
         res += "Payment Breakdown:\n"
         for p in payments:
-            res += f"- {p['payment_mode'].upper()}: ₹{p['amount']}\n"
+            res += f"- {p['payment_mode'].upper()}: ₹{p['amount']:.2f}\n"
             
         return res
 

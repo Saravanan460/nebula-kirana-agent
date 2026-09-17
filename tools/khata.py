@@ -34,7 +34,7 @@ def charge_khata(chat_id: int, customer_name: str, amount: float, note: str = ""
                 "INSERT INTO khata_txns (khata_id, amount, note) VALUES (?, ?, ?)",
                 (khata_id, amount, note or "Manual charge")
             )
-            return f"✅ Charged ₹{amount} to {customer_name}. New balance: ₹{new_balance} (Owed to you)."
+            return f"✅ Charged ₹{amount:.2f} to {customer_name}. New balance: ₹{new_balance:.2f} (Owed to you)."
 
 def pay_khata(chat_id: int, customer_name: str, amount: float, note: str = "") -> str:
     """Record a payment received from a khata customer."""
@@ -52,7 +52,7 @@ def pay_khata(chat_id: int, customer_name: str, amount: float, note: str = "") -
             current_balance = row['balance']
             
             if amount > current_balance:
-                return f"❌ Error: Cannot pay ₹{amount}. {customer_name} only owes ₹{current_balance}."
+                return f"❌ Error: Cannot pay ₹{amount:.2f}. {customer_name} only owes ₹{current_balance:.2f}."
                 
             new_balance = current_balance - amount
             
@@ -61,7 +61,7 @@ def pay_khata(chat_id: int, customer_name: str, amount: float, note: str = "") -
                 "INSERT INTO khata_txns (khata_id, amount, note) VALUES (?, ?, ?)",
                 (khata_id, -amount, note or "Payment received")
             )
-            return f"✅ Recorded payment of ₹{amount} from {customer_name}. Remaining balance: ₹{new_balance}."
+            return f"✅ Recorded payment of ₹{amount:.2f} from {customer_name}. Remaining balance: ₹{new_balance:.2f}."
 
 def check_khata(chat_id: int, customer_name: str = None) -> str:
     """
@@ -81,11 +81,11 @@ def check_khata(chat_id: int, customer_name: str = None) -> str:
             txns = cursor.fetchall()
             
             res = f"📒 {customer_name}'s Khata\n"
-            res += f"Current Balance: ₹{row['balance']} (Owed to you)\n\n"
+            res += f"Current Balance: ₹{row['balance']:.2f} (Owed to you)\n\n"
             res += "Recent Transactions:\n"
             for t in txns:
                 date_str = t['created_at'].split()[0]
-                amount_str = f"+₹{t['amount']}" if t['amount'] > 0 else f"-₹{abs(t['amount'])}"
+                amount_str = f"+₹{t['amount']:.2f}" if t['amount'] > 0 else f"-₹{abs(t['amount']):.2f}"
                 res += f"{date_str}: {amount_str} ({t['note']})\n"
             return res
         else:
@@ -97,7 +97,7 @@ def check_khata(chat_id: int, customer_name: str = None) -> str:
             res = "📒 All Active Khatas:\n"
             total = 0
             for r in rows:
-                res += f"- {r['customer']}: ₹{r['balance']}\n"
+                res += f"- {r['customer']}: ₹{r['balance']:.2f}\n"
                 total += r['balance']
-            res += f"\nTotal money out in the market: ₹{total}"
+            res += f"\nTotal money out in the market: ₹{total:.2f}"
             return res

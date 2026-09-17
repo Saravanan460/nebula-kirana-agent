@@ -151,10 +151,10 @@ def view_bill(chat_id: int) -> str:
         res = f"🧾 Current Bill (ID: {bill_id})\n"
         res += "-" * 30 + "\n"
         for item in items:
-            res += f"{item['name']} - {item['quantity']} {item['unit']} @ ₹{item['unit_price']}\n"
+            res += f"{item['name']} - {item['quantity']} {item['unit']} @ ₹{item['unit_price']:.2f}\n"
             if item['cgst'] > 0 or item['sgst'] > 0:
-                res += f"   + Tax: CGST ₹{item['cgst']} | SGST ₹{item['sgst']}\n"
-            res += f"   Line Total: ₹{item['line_total']}\n"
+                res += f"   + Tax: CGST ₹{item['cgst']:.2f} | SGST ₹{item['sgst']:.2f}\n"
+            res += f"   Line Total: ₹{item['line_total']:.2f}\n"
             
             subtotal += item['quantity'] * item['unit_price']
             total_cgst += item['cgst']
@@ -162,11 +162,15 @@ def view_bill(chat_id: int) -> str:
             grand_total += item['line_total']
             
         res += "-" * 30 + "\n"
-        res += f"Subtotal: ₹{round(subtotal, 2)}\n"
+        res += f"Subtotal: ₹{subtotal:.2f}\n"
         if total_cgst > 0 or total_sgst > 0:
-            res += f"Total CGST: ₹{round(total_cgst, 2)}\n"
-            res += f"Total SGST: ₹{round(total_sgst, 2)}\n"
-        res += f"Grand Total: ₹{round(grand_total, 2)}"
+            res += f"Total CGST: ₹{total_cgst:.2f}\n"
+            res += f"Total SGST: ₹{total_sgst:.2f}\n"
+        res += f"Grand Total: ₹{grand_total:.2f}\n"
+        res += "\nWhat is the **customer's name** and **payment mode** (cash, upi, card, or khata)?"
+        
+        # Mark this bill as reviewed by the owner
+        cursor.execute("UPDATE bills SET reviewed = 1 WHERE id = ?", (bill_id,))
         
         return res
 
@@ -178,11 +182,15 @@ def cancel_bill(chat_id: int) -> str:
             return "✅ Draft bill cancelled."
         return "❌ No active draft bill to cancel."
 
-def finalize_bill(chat_id: int, payment_mode: str, khata_customer: str = None, txn_id: str = None) -> str:
+def finalize_bill(chat_id: int, payment_mode: str, customer_name: str, khata_customer: str = None, txn_id: str = None) -> str:
     """
     Finalize the draft bill, decrement stock, and apply to khata if applicable.
     payment_mode must be 'cash', 'upi', 'card', or 'khata'.
+    customer_name is always required (the name of the buyer for record-keeping).
     """
+    if not customer_name or not customer_name.strip():
+        return "❌ Error: customer_name is required to finalize a bill. Ask the owner for the customer's name."
+
     if not txn_id:
         txn_id = str(uuid.uuid4())
     
@@ -191,6 +199,13 @@ def finalize_bill(chat_id: int, payment_mode: str, khata_customer: str = None, t
         
     if payment_mode.lower() == 'khata' and not khata_customer:
         return "❌ Error: Khata payment mode requires a khata_customer name."
+
+    # Code-level guardrail: the owner MUST have seen the bill via view_bill first
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT reviewed FROM bills WHERE chat_id = ? AND status = 'draft'", (chat_id,))
+        draft = cursor.fetchone()
+        if draft and not draft['reviewed']:
+            return "⚠️ Please show the bill to the owner first by calling `view_bill` before finalizing."
         
     with db_lock:
         with get_db_cursor() as cursor:
@@ -259,12 +274,12 @@ def finalize_bill(chat_id: int, payment_mode: str, khata_customer: str = None, t
             cursor.execute(
                 """
                 UPDATE bills 
-                SET status = 'finalized', payment_mode = ?, khata_customer = ?, 
+                SET status = 'finalized', payment_mode = ?, khata_customer = ?, customer_name = ?,
                     subtotal = ?, total_cgst = ?, total_sgst = ?, grand_total = ?, 
                     txn_id = ?, finalized_at = ?
                 WHERE id = ?
                 """,
-                (payment_mode.lower(), khata_customer, subtotal, total_cgst, total_sgst, grand_total, txn_id, now, bill_id)
+                (payment_mode.lower(), khata_customer, customer_name.strip(), subtotal, total_cgst, total_sgst, grand_total, txn_id, now, bill_id)
             )
             
             # 6. Apply to Khata if needed
@@ -274,6 +289,6 @@ def finalize_bill(chat_id: int, payment_mode: str, khata_customer: str = None, t
                     "INSERT INTO khata_txns (khata_id, bill_id, amount, note) VALUES (?, ?, ?, ?)",
                     (khata_id, bill_id, grand_total, f"Bill #{bill_id}")
                 )
-                return f"✅ Bill finalized successfully (ID: {bill_id}). Total: ₹{grand_total}. Added to {khata_customer}'s khata."
+                return f"✅ Bill finalized successfully (ID: {bill_id}). Total: ₹{grand_total:.2f}. Added to {khata_customer}'s khata."
                 
-            return f"✅ Bill finalized successfully (ID: {bill_id}). Total: ₹{grand_total} via {payment_mode}."
+            return f"✅ Bill finalized successfully (ID: {bill_id}). Total: ₹{grand_total:.2f} via {payment_mode} (Customer: {customer_name.strip()})."

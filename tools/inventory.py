@@ -144,12 +144,12 @@ def search_product(chat_id: int, query: str) -> str:
 
 def list_all_products(chat_id: int) -> str:
     """
-    List all products in the inventory with their current stock levels.
+    List all products in the inventory with their SKU, cost, MRP and stock.
     """
     with get_db_cursor() as cursor:
         cursor.execute(
             """
-            SELECT name, sku, stock_qty, mrp, unit 
+            SELECT name, sku, cost_price, mrp, stock_qty, unit 
             FROM products 
             WHERE chat_id = ? AND is_active = 1
             ORDER BY name ASC
@@ -160,8 +160,9 @@ def list_all_products(chat_id: int) -> str:
         
         if not rows:
             return "❌ No products found in your inventory."
-            
+        
         results = [f"📦 Your Entire Inventory ({len(rows)} items):"]
         for r in rows:
-            results.append(f"- {r['name']} | SKU: {r['sku']} | ₹{r['mrp']} | Stock: {r['stock_qty']} {r['unit']}")
+            results.append(f"- {r['name']} | SKU: {r['sku']} | Cost: ₹{r['cost_price']:.2f} | MRP: ₹{r['mrp']:.2f} | Stock: {r['stock_qty']} {r['unit']}")
         return "\n".join(results)
+

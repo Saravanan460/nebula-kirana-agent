@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS bills (
     grand_total     REAL DEFAULT 0,
     txn_id          TEXT UNIQUE,                -- idempotency key (UUID)
     khata_customer  TEXT,                       -- if on credit, whose khata
+    customer_name   TEXT,                       -- buyer's name (always required)
+    reviewed        INTEGER NOT NULL DEFAULT 0, -- 1 = owner has seen the bill via view_bill
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     finalized_at    TIMESTAMP
 );
@@ -106,6 +108,20 @@ def setup_db():
         conn.executescript(SCHEMA_SQL)
         conn.commit()
         print("Database schema created successfully.")
+        # Safe migration: add customer_name column if it doesn't exist yet
+        try:
+            conn.execute("ALTER TABLE bills ADD COLUMN customer_name TEXT")
+            conn.commit()
+            print("Migration: added customer_name column to bills.")
+        except Exception:
+            pass  # Column already exists — that's fine
+        # Safe migration: add reviewed column if it doesn't exist yet
+        try:
+            conn.execute("ALTER TABLE bills ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+            print("Migration: added reviewed column to bills.")
+        except Exception:
+            pass  # Column already exists — that's fine
     except Exception as e:
         print(f"Error creating schema: {e}")
     finally:

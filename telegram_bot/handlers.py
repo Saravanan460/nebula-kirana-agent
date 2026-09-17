@@ -1,5 +1,7 @@
 import os
 import re
+import html
+
 from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
@@ -12,22 +14,23 @@ from database.seed_data import seed_db
 MAX_MSG_LEN = 4096
 
 # Simple in-memory storage for message history per chat to enable multi-turn
-# For a production app this should be in SQLite, but memory is fine for the 5-day task 
+# For a production app this should be in SQLite, but memory is fine for the 5-day task
 # as long as core data (bills, stock) survives restart.
 CHAT_HISTORIES = {}
 
 async def _send_long_text(update: Update, text: str):
     """Split and send text that may exceed Telegram's 4096 char limit."""
-    # Convert standard markdown bold to HTML bold for Telegram
+    # Strip any [FILE_READY:...] markers the LLM might echo
+    text = re.sub(r'\[FILE_READY:.+?\]', '', text).strip()
+
+    # Send as HTML (convert **bold** → <b>bold</b>)
     formatted_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
-    # Strip any leftover [FILE_READY:...] markers the LLM might echo
-    formatted_text = re.sub(r'\[FILE_READY:.+?\]', '', formatted_text)
+    formatted_text = formatted_text.replace('<', '&lt;').replace('>', '&gt;') if '<b>' not in formatted_text else formatted_text
     
     for i in range(0, len(formatted_text), MAX_MSG_LEN):
         try:
             await update.message.reply_text(formatted_text[i:i + MAX_MSG_LEN], parse_mode=ParseMode.HTML)
         except Exception:
-            # Fallback to raw text if HTML parsing fails (e.g. unclosed tags)
             await update.message.reply_text(formatted_text[i:i + MAX_MSG_LEN])
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -71,31 +74,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Run agent with automatic model fallback on rate limits
         deps = AgentDeps(chat_id=chat_id, message_id=update.message.message_id)
-        models = get_fallback_models()
-        last_error = None
-        result = None
+        fallback_model = get_fallback_models()
         
-        for model_name, model in models:
-            try:
-                agent._model = model
-                result = await agent.run(
-                    user_text,
-                    deps=deps,
-                    message_history=CHAT_HISTORIES[chat_id]
-                )
-                break  # Success — stop trying
-            except Exception as e:
-                err_str = str(e)
-                # If it's a rate limit (429) or overload (503), try next model
-                if '429' in err_str or '503' in err_str or 'Too Many Requests' in err_str or 'quota' in err_str.lower():
-                    print(f"RATE_LIMIT: {model_name} rate-limited, trying next model...")
-                    last_error = e
-                    continue
-                else:
-                    raise  # Non-rate-limit error, bubble up immediately
-        
-        if result is None:
-            raise last_error  # All models failed
+        agent._model = fallback_model
+        result = await agent.run(
+            user_text,
+            deps=deps,
+            message_history=CHAT_HISTORIES[chat_id]
+        )
         
         # Update history (keep last 20 messages to avoid context bloat)
         all_msgs = result.all_messages()

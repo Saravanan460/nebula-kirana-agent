@@ -131,14 +131,23 @@ User: "make a bill: 2kg sugar and 4 maggi, UPI"
 
 We didn't just build a chatbot; we built a rigorous, stateful backend application orchestrated by an LLM. Every "hard part" from the assignment is addressed below.
 
-### 🛡️ 1. Grounding & Oversell Guard
+### 🛡️ 1. Grounding & Guardrails
 > *"Prices, GST slabs and stock come from the DB via tools. Never invent a product or a price."*
 
 The LLM is strictly forbidden from guessing SKUs, prices, or taxes. It **must** use `search_product` to fetch reality from the database.
 
 - **Oversell Guard:** Stock validation happens entirely in the **tool/database layer**, not the prompt. If the user asks for 300 packets but only 150 exist, `add_item_to_bill` explicitly blocks it and returns an error.
 - **Below-Cost Guard:** `finalize_bill` checks that no item's MRP is below its `cost_price`.
+- **Confirmation Guardrail:** We enforce a hard database-level check: `finalize_bill` will reject execution if the `reviewed` flag isn't set by a prior `view_bill` call. The LLM physically cannot skip confirmation.
 - **Off-Topic Resistance:** The agent refuses non-store requests like "write me a Python script" — it stays in character as a store operator.
+
+### 🧠 2. Stateless Model Fallback Architecture
+> *"Graceful degradation when primary APIs hit rate limits."*
+
+The agent utilizes Pydantic-AI's `FallbackModel` to ensure 100% uptime:
+- For **every single message**, it attempts the primary model (e.g., `gpt-oss` via Groq) first.
+- If it encounters a `429 Too Many Requests` or `503 Service Unavailable`, it instantly and transparently falls back to `Gemini 2.0 Flash`.
+- **Stateless design:** Rate limits don't get the agent "stuck" on the smaller model. The very next message will route to the primary smartest model again.
 
 ### 🔄 2. Concurrency & Race Conditions
 > *"Two bills — or a sale plus a stock-in — in flight at once must not corrupt stock."*

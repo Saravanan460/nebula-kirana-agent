@@ -25,15 +25,30 @@ def _build_models():
     models = []
     if os.environ.get("GROQ_API_KEY"):
         # max_retries=0 disables Groq SDK's internal 429 retry loop
-        # so our fallback handler can instantly switch to Gemini
+        # so our fallback handler can instantly switch to the next model
         async_groq = AsyncGroq(api_key=os.environ["GROQ_API_KEY"], max_retries=0)
         provider = GroqProvider(groq_client=async_groq)
-        models.append(("groq", GroqModel('openai/gpt-oss-20b', provider=provider)))
+        
+        # Groq rate limits are PER MODEL. By adding multiple models,
+        # we effectively multiply our free tier limits by switching buckets!
+        models.append(("qwen", GroqModel('qwen/qwen3.8-27b', provider=provider)))
+        models.append(("gpt-oss-20b", GroqModel('openai/gpt-oss-20b', provider=provider)))
+        models.append(("gpt-oss-120b", GroqModel('openai/gpt-oss-120b', provider=provider)))
     if os.environ.get("GEMINI_API_KEY"):
-        models.append(("gemini", GoogleModel('gemini-3.6-flash')))
+        # Gemini limits are PER MODEL (20 requests/day/model).
+        # By chaining models that actually exist in your account, we get more quota!
+        models.append(("gemini-lite", GoogleModel('gemini-3.5-flash-lite')))
+        models.append(("gemini-37", GoogleModel('gemini-3.7-flash')))
+        models.append(("gemini-38", GoogleModel('gemini-3.8-flash')))
+        models.append(("gemini-36", GoogleModel('gemini-3.6-flash')))
+    from pydantic_ai.models.fallback import FallbackModel
+    
     if not models:
         raise RuntimeError("No API key found. Set GROQ_API_KEY or GEMINI_API_KEY in .env")
-    return models
+        
+    # Return a single FallbackModel that handles all API failures natively
+    # without restarting the agent loop and causing duplicate tool executions
+    return FallbackModel(*[m for name, m in models])
 
 # Agent is created with a placeholder; model is swapped in init_agent()
 agent = Agent(
@@ -49,9 +64,8 @@ def init_agent():
     """Must be called after load_dotenv(). Sets the real model on the agent."""
     global _available_models
     _available_models = _build_models()
-    agent._model = _available_models[0][1]
-    names = [m[0] for m in _available_models]
-    print(f"Agent initialized. Models: {names} (primary: {names[0]})")
+    agent._model = _available_models
+    print(f"Agent initialized with FallbackModel.")
 
 def get_fallback_models():
     """Return list of (name, model) tuples for fallback handling."""
@@ -127,11 +141,14 @@ def tool_cancel_bill(ctx: RunContext[AgentDeps]) -> str:
     return cancel_bill(ctx.deps.chat_id)
 
 @agent.tool
-def tool_finalize_bill(ctx: RunContext[AgentDeps], payment_mode: str, khata_customer: str = None) -> str:
-    """Finalize the draft bill. payment_mode must be 'cash', 'upi', 'card', or 'khata'."""
+def tool_finalize_bill(ctx: RunContext[AgentDeps], payment_mode: str, customer_name: str, khata_customer: str = None) -> str:
+    """Finalize the draft bill.
+    payment_mode must be 'cash', 'upi', 'card', or 'khata'.
+    customer_name is ALWAYS required — the name of the buyer. NEVER finalize without it. Ask if not provided.
+    khata_customer is only needed when payment_mode is 'khata'."""
     # Use message_id as idempotency key
     txn_id = f"msg_{ctx.deps.message_id}"
-    return finalize_bill(ctx.deps.chat_id, payment_mode, khata_customer, txn_id)
+    return finalize_bill(ctx.deps.chat_id, payment_mode, customer_name, khata_customer, txn_id)
 
 # Register Khata Tools
 @agent.tool
