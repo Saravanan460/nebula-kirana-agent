@@ -61,10 +61,11 @@ agent = Agent(
 _available_models: list = []
 
 def init_agent():
-    """Must be called after load_dotenv(). Sets the real model on the agent."""
+    """Initialize agent and trigger fast fail if API keys are missing."""
     global _available_models
     _available_models = _build_models()
     agent._model = _available_models
+    print("Agent initialized with models.")
     print(f"Agent initialized with FallbackModel.")
 
 def get_fallback_models():
