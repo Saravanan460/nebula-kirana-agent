@@ -3,8 +3,7 @@
 <div align="center">
   <h3>Run an entire Indian kirana store from a chat window — with an agent, not a menu.</h3>
   <i>An autonomous, conversational Point-of-Sale (POS) and store management agent built for Indian Kirana stores.</i><br><br>
-  <b>🤖 Live Bot: <a href="https://t.me/NebulaKirana_Saravanan_bot">@NebulaKirana_Saravanan_bot</a></b><br>
-  <b>Developed for the Nebula KnowLab Engineering Hiring Task</b>
+  <b>🤖 Live Bot 24/7 (Any one can test it now): <a href="https://t.me/NebulaKirana_Saravanan_bot">@NebulaKirana_Saravanan_bot</a></b><br>
 </div>
 
 ---
