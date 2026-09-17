@@ -189,6 +189,29 @@ Multiple Nebula engineers can test simultaneously without collision:
 - MRP is treated as GST-inclusive (standard Indian retail). The tool back-calculates base amount, splits into CGST + SGST, and rounds correctly.
 - Every bill shows a per-line and total tax breakup.
 
+### 🛡️ 9. Zero-Downtime LLM Fallback Architecture
+> *"Free-tier LLM APIs have strict rate limits. A busy store cannot wait for a cooldown."*
+
+We utilized Pydantic-AI's `FallbackModel` to create a highly resilient, stateless cascading architecture. The agent dynamically shifts to backup models during traffic bursts, ensuring the shopkeeper never sees an error.
+
+```text
+┌────────────────────────────────────────────────────────────────┐
+│                   PYDANTIC-AI FALLBACK ROUTER                  │
+│                                                                │
+│  Message 1:                                                    │
+│  [1] Try Primary (Groq Llama 3) ────────> ✅ Success           │
+│                                                                │
+│  Message 2 (Burst Traffic):                                    │
+│  [1] Try Primary (Groq Llama 3) ────────> ❌ 429 Rate Limit    │
+│  [2] Try Secondary (Groq Mixtral) ──────> ❌ 429 Rate Limit    │
+│  [3] Try Tertiary (Gemini 2.0 Flash) ───> ✅ Success           │
+│                                                                │
+│  Message 3 (Next Message):                                     │
+│  [1] Try Primary (Groq Llama 3) ────────> ✅ Cooldown over     │
+└────────────────────────────────────────────────────────────────┘
+```
+- **Stateless Routing:** Rate limits are per-request. The router doesn't get "stuck" on a weaker backup model; it always attempts to promote the next turn back to the smartest primary model.
+
 ---
 
 ## 📋 Capability Map (from Assignment §3)
