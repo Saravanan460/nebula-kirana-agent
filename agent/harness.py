@@ -25,12 +25,6 @@ def _build_models():
     models = []
     if os.environ.get("GROQ_API_KEY"):
         # max_retries=0 disables Groq SDK's internal 429 retry loop
-<<<<<<< HEAD
-        # so our fallback handler can instantly switch to Gemini
-        async_groq = AsyncGroq(api_key=os.environ["GROQ_API_KEY"], max_retries=0)
-        provider = GroqProvider(groq_client=async_groq)
-        models.append(("groq", GroqModel('openai/gpt-oss-20b', provider=provider)))
-=======
         # so our fallback handler can instantly switch to the next model
         async_groq = AsyncGroq(api_key=os.environ["GROQ_API_KEY"], max_retries=0)
         provider = GroqProvider(groq_client=async_groq)
@@ -40,8 +34,6 @@ def _build_models():
         models.append(("qwen", GroqModel('qwen/qwen3.8-27b', provider=provider)))
         models.append(("gpt-oss-20b", GroqModel('openai/gpt-oss-20b', provider=provider)))
         models.append(("gpt-oss-120b", GroqModel('openai/gpt-oss-120b', provider=provider)))
-        
->>>>>>> ac73771 (fix: added hard code-level guardrails for billing confirmation, update fallback architecture docs)
     if os.environ.get("GEMINI_API_KEY"):
         # Gemini limits are PER MODEL (20 requests/day/model).
         # By chaining models that actually exist in your account, we get more quota!
