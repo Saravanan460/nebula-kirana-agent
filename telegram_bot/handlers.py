@@ -76,12 +76,36 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         deps = AgentDeps(chat_id=chat_id, message_id=update.message.message_id)
         fallback_model = get_fallback_models()
         
+<<<<<<< HEAD
+        for model_name, model in models:
+            try:
+                agent._model = model
+                result = await agent.run(
+                    user_text,
+                    deps=deps,
+                    message_history=CHAT_HISTORIES[chat_id]
+                )
+                break  # Success — stop trying
+            except Exception as e:
+                err_str = str(e)
+                # If it's a rate limit (429) or overload (503), try next model
+                if '429' in err_str or '503' in err_str or 'Too Many Requests' in err_str or 'quota' in err_str.lower():
+                    print(f"RATE_LIMIT: {model_name} rate-limited, trying next model...")
+                    last_error = e
+                    continue
+                else:
+                    raise  # Non-rate-limit error, bubble up immediately
+        
+        if result is None:
+            raise last_error  # All models failed
+=======
         agent._model = fallback_model
         result = await agent.run(
             user_text,
             deps=deps,
             message_history=CHAT_HISTORIES[chat_id]
         )
+>>>>>>> ac73771 (fix: added hard code-level guardrails for billing confirmation, update fallback architecture docs)
         
         # Update history (keep last 20 messages to avoid context bloat)
         all_msgs = result.all_messages()
