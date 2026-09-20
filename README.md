@@ -263,6 +263,15 @@ nebula-kirana-agent/
 └── .env
 ```
 
+## ☁️ Zero-Downtime Cloud Automation (PythonAnywhere)
+
+PythonAnywhere free tiers have strict 512MB quotas, no background process persistence after daily reboots, and no free scheduled tasks. To bypass this, the project includes an intelligent local Windows automation setup:
+
+1. **Space Management:** The deployment process utilizes `GIT_LFS_SKIP_SMUDGE=1` and `pip install --no-cache-dir` to successfully deploy a heavy LLM backend (Pydantic-AI + Anthropic/Groq/Gemini SDKs) strictly within 512MB.
+2. **API Remote Execution:** A local Python script (`restart_pa_bot.py`) automatically connects to the PythonAnywhere API and spawns a headless bash console.
+3. **Automated Revival:** The script pushes raw bash commands (`pkill`, `source venv/bin/activate`, `nohup`) directly into the remote console, bypassing standard CRLF script errors.
+4. **Hands-Free Reliability:** A `.bat` file in the Windows `shell:startup` folder triggers this API script invisibly upon every local machine boot, ensuring the cloud bot remains alive 24/7 without manual intervention.
+
 ---
 
 *Built with ❤️ by Saravana for Nebula KnowLab*
